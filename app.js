@@ -41,7 +41,7 @@ function mainLoop() {
         Thank you for using the Employee Tracker!
 --------------------------------------------------------
 `           );
-            return false;
+            process.exit();
         }
     });
 }
@@ -117,7 +117,51 @@ function addHandler(answer) {
         break;
         
         case 'add a role':
-            addRole();
+            let depart = [];
+            db.query('SELECT * FROM department;', (err, rows) => {
+                depart = rows.map(row => {
+                    return (row.id + '. ' +  row.dep_name);
+                });
+                addRole(depart);
+            });
+            
+        break;
+
+        case 'add an employee':
+            
+            let managers = []
+            const sql = `SELECT employee.id AS employee_id, concat(employee.first_name, " ", employee.last_name) AS full_name
+            FROM employee WHERE employee.is_manager = 1;`;
+            db.query(sql, (err, rows) => {
+                managers = rows.map(row => {
+                    return (row.employee_id + '. ' +  row.full_name);
+                });
+                let roles = [];
+                db.query('SELECT roles.id, roles.title FROM roles;', (err, rows) => {
+                    roles = rows.map(row => {
+                        return (row.id + '. ' +  row.title);
+                    });
+                    addEmployee(roles, managers);
+                });
+            });
+            
+        break;
+
+        case 'update an employee role':
+            let employees = []
+            const sql_ = 'SELECT employee.id AS employee_id, concat(employee.first_name, " ", employee.last_name) AS full_name FROM employee;';
+            db.query(sql_, (err, rows) => {
+                employees = rows.map(row => {
+                    return (row.employee_id + '. ' +  row.full_name);
+                });
+                let roles = [];
+                db.query('SELECT roles.id, roles.title FROM roles;', (err, rows) => {
+                    roles = rows.map(row => {
+                        return (row.id + '. ' +  row.title);
+                    });
+                    updateEmployee(roles, employees);
+                });
+            });
         break;
     }
 }
@@ -131,6 +175,7 @@ async function addDepart() {
             message: 'What is the name for the new department?' 
         },
     ]);
+
     data = [data.depart];
     db.query(sql, data, (err, rows) => {
         if (err) {
@@ -142,11 +187,9 @@ async function addDepart() {
     });
 }
 
-async function addRole() {
+async function addRole(depart) {
     const sql = 'INSERT INTO roles (title, salary, department_id) VALUES (?, ?, ?)'
-    let depart = await db.query('SELECT department.depart_name FROM department;', (err, rows) => {
-
-    });
+    
     let data = await inquirer.prompt([
         {
             name: 'title',
@@ -159,12 +202,16 @@ async function addRole() {
             message: 'What is the salary for this role?'
         },
         {
-            name: 'd_id',
-            type: 'number',
-            message: 'What is the ID of the department this role is a part of?'
+            name: 'department',
+            type: 'list',
+            message: 'What department id this role is a part of?',
+            choices: depart
         }
     ]);
-    data = [data.title, data.salary, data.d_id];
+    let tempDep = data.department.split('.');
+    let dep = parseInt(tempDep[0]);
+
+    data = [data.title, data.salary, dep];
     db.query(sql, data, (err, rows) => {
         if (err) {
             console.log(err);
@@ -175,38 +222,85 @@ async function addRole() {
     });
 }
 
-async function addEmployee() {
-    const sql = 'INSERT INTO employees (first_name, last_name, role_id, manager_id, is_manager) VALUES (?, ?, ?)'
+async function addEmployee(roles, managers) {
+    const sql = 'INSERT INTO employee (first_name, last_name, role_id, manager_id, is_manager) VALUES (?, ?, ?, ?, ?)'
     let data = await inquirer.prompt([
         {
-            name: 'title',
+            name: 'first_name',
             type: 'input',
-            message: 'What is the name for the new role' 
+            message: 'What is the employees first name?' 
         },
         {
-            name: 'salary',
+            name: 'last_name',
             type: 'input',
-            message: 'What is the salary for this role?'
+            message: 'What is the employees last name?'
         },
         {
-            name: 'd_id',
-            type: 'number',
-            message: 'What is the ID of the department this role is a part of?'
+            name: 'role',
+            type: 'list',
+            message: 'What is this employees role?',
+            choices: roles
+        },
+        {
+            name: 'manager',
+            type: 'list',
+            message: 'Who is their manager? (can be blank)',
+            choices: managers
+        },
+        {
+            name: 'is_manager',
+            type: 'confirm',
+            message: 'Is this employee a manager?'
         }
     ]);
-    data = [data.title, data.salary, data.d_id];
+    let tempRole = data.role.split('.');
+    let tempManager = data.manager.split('.');
+    let role = parseInt(tempRole[0]);
+    let manager = parseInt(tempManager[0]);
+    let is_manager = data.is_manager? 1 : 0;
+
+    data = [data.first_name, data.last_name, role, manager, is_manager];
     db.query(sql, data, (err, rows) => {
         if (err) {
             console.log(err);
             return;
         }
-        console.log('Successfully Added ' + data[0]);
+        console.log('Successfully Added ' + data[0] + ' ' + data[1]);
         mainLoop();
     });
 }
 
-function updateEmployee() {
+async function updateEmployee(roles, employees) {
+    const sql = 'UPDATE employee SET role_id = ? WHERE employee.id = ?'
+    let data = await inquirer.prompt([
+        {
+            name: 'employee',
+            type: 'list',
+            message: 'What employee do you want to update?',
+            choices: employees 
+        },
+        {
+            name: 'role',
+            type: 'list',
+            message: 'What is this employees new role?',
+            choices: roles
+        }
+    ]);
+    let tempRole = data.role.split('.');
+    let tempEmployee = data.employee.split('.');
+    let role = parseInt(tempRole[0]);
+    let employee = parseInt(tempEmployee[0]);
 
+    data = [role, employee];
+    console.log(data)
+    db.query(sql, data, (err, rows) => {
+        if (err) {
+            console.log(err);
+            return;
+        }
+        console.log('Successfully Updated Employee');
+        mainLoop();
+    });
 }
 
 initialize();
